@@ -13,11 +13,22 @@ def regex_tokenizer(text):
     tokens = re.findall(r'\b\w+\b', text)
     return tokens
 
+def add_bos_eos_and_tokenize(text):
+    sentences = text.strip().split('\n')
+    all_tokens = []
+
+    for sentence in sentences:
+        sentence_tokens = regex_tokenizer(sentence)
+        all_tokens += ['<BOS>'] + sentence_tokens + ['<EOS>']
+    
+    return all_tokens
+
 def build_vocab(tokens, min_freq=1):
     counter = Counter(tokens) # dict of word counts, word: freq
 
     vocab_words = [word for word, freq in counter.items() if freq >= min_freq] # filter on freq
-    special_tokens = ['<PAD>', '<UNK>', '<BOS>', '<EOS>'] # add special tokens
+    special_tokens = ['<PAD>', '<UNK>'] # add special tokens
+    # need to remove these special tokens if they are included in the training text, otherwise stoi will be wrongly constructed
 
     vocab = special_tokens + sorted(vocab_words)
 
@@ -35,7 +46,7 @@ def decode(indices, itos):
     return [itos[i] for i in indices]
 
 
-tokens = regex_tokenizer(text)
+tokens = add_bos_eos_and_tokenize(text)
 
 vocab, stoi, itos = build_vocab(tokens)
 
