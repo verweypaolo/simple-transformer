@@ -36,11 +36,30 @@ def decode(indices, itos):
 
 
 tokens = regex_tokenizer(text)
-vocab, stoi, itos = build_vocab(tokens)
-encoded = encode(tokens, stoi)
-print(encoded)
-decoded = decode(encoded, itos)
-print(decoded)
 
-# next sentence encoding
-# Then continue with chatgpt 
+vocab, stoi, itos = build_vocab(tokens)
+
+encoded = encode(tokens, stoi)
+decoded = decode(encoded, itos)
+
+# let's create training sequences
+# these are sequences of length context_length that include as target the next token in the training data 'text'
+
+def create_sequences(encoded_tokens, context_length):
+    inputs = []
+    targets = []
+
+    for i in range(len(encoded_tokens) - context_length):
+        input_seq = encoded_tokens[i:i+context_length]
+        target_seq = encoded_tokens[i+1:i+context_length+1]
+        
+        inputs.append(input_seq)
+        targets.append(target_seq)
+
+    return inputs, targets
+# returning two lists of context_length sized sequences (also lists)
+
+context_length = 4
+inputs, targets = create_sequences(encoded, context_length)
+
+print(inputs[0], targets[0])
