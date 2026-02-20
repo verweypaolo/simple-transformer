@@ -2,6 +2,10 @@ import re
 
 from collections import Counter
 
+import torch
+import torch.nn as nn
+
+
 text = """
 The cat sat on the mat.
 The cat ate the fish.
@@ -73,4 +77,47 @@ def create_sequences(encoded_tokens, context_length):
 context_length = 4
 inputs, targets = create_sequences(encoded, context_length)
 
-print(inputs[0], targets[0])
+
+# let's create embeddings so the models can use our text
+vocab_size = len(stoi)
+embedding_dim = 32
+
+class EmbeddingLayer(nn.Module):
+    def __init__(self, vocab_size, embedding_dim, context_length):
+        super().__init__()
+
+        # token embeddings
+        self.token_embedding = nn.Embedding(vocab_size, embedding_dim)
+
+        # positional embeddings
+        self.position_embedding = nn.Embedding(context_length, embedding_dim)
+
+        # this code instantiates two Embedding objects with size input to be filled in forward function below.
+
+    def forward(self, x):
+        '''
+        x_shape: (batch_size, context_length)
+        '''
+
+        batch_size, seq_length = x.shape
+
+        # create position indices
+        positions = torch.arange(seq_length, device=x.device) # this sets the tensor on the same device as my input tensor, [0, 1, 2, 3]
+        positions = positions.unsqueeze(0).expand(batch_size, seq_length)
+
+        token_emb = self.token_embedding(x)
+        position_emb = self.position_embedding(positions)
+        #positions is a matrix of repeating rows, and position_emb is a 3 dimensional matrix of repeating two dimensional matrices, 
+        # where the row of each two dimensional matrix is the position vector of 0 then 1 then 2 then 3
+
+        return token_emb + position_emb
+        # finally both embeddings are added to create a single embedding that stores both token and position information
+    
+embedding_layer = EmbeddingLayer(vocab_size, embedding_dim, context_length)
+sample_input = torch.tensor(inputs[:2])
+output = embedding_layer(sample_input) # calling model directly calls forward method in pytorch
+
+print("Input shape:", sample_input.shape)
+print("Output shape:", output.shape)
+
+#understand output shape
