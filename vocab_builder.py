@@ -1,9 +1,11 @@
 import re
+import math
 
 from collections import Counter
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 
 text = """
@@ -120,4 +122,55 @@ output = embedding_layer(sample_input) # calling model directly calls forward me
 print("Input shape:", sample_input.shape)
 print("Output shape:", output.shape)
 
-#understand output shape
+# attention layer
+
+# understand attention better
+class SelfAttention(nn.Module):
+    def __init__(self, embedding_dim):
+        super().__init__()
+        
+        self.embedding_dim = embedding_dim
+        
+        # Linear projections for Q, K, V
+        self.query = nn.Linear(embedding_dim, embedding_dim)
+        self.key   = nn.Linear(embedding_dim, embedding_dim)
+        self.value = nn.Linear(embedding_dim, embedding_dim)
+
+    def forward(self, x):
+        # x shape: (batch_size, seq_length, embedding_dim)
+        B, T, C = x.shape
+
+        Q = self.query(x)
+        K = self.key(x)
+        V = self.value(x)
+
+        # Compute attention scores
+        scores = Q @ K.transpose(-2, -1) / math.sqrt(C)
+        # shape: (B, T, T)
+
+        # Create causal mask (prevent looking forward)
+        mask = torch.tril(torch.ones(T, T, device=x.device))
+        scores = scores.masked_fill(mask == 0, float('-inf'))
+
+        # Softmax
+        attention = F.softmax(scores, dim=-1)
+
+        # Weighted sum of values
+        output = attention @ V
+        # shape: (B, T, C)
+
+        return output
+
+class FeedForward(nn.Module):
+    def __init__(self, embedding_dim):
+        super().__init__()
+        
+        self.net = nn.Sequential(
+            nn.Linear(embedding_dim, 4 * embedding_dim),
+            nn.ReLU(),
+            nn.Linear(4 * embedding_dim, embedding_dim)
+        )
+
+    def forward(self, x):
+        return self.net(x)
+    
