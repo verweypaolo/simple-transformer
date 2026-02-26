@@ -225,7 +225,7 @@ model = TinyGPT(vocab_size, embedding_dim=32, context_length=context_length)
 model = model.to(device)
 
 # train!
-optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3) # note the model.parameters() argument, optimizer stores references
 
 epochs = 500
 
@@ -241,10 +241,52 @@ for epoch in range(epochs):
         Y.view(-1)
     )
 
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+    optimizer.zero_grad() # clear old gradients, pytorch accumulates gradients by default (accumulate how?). if skipped gradients stack.
+    loss.backward() # pytorch computes the gradient of the loss wrt all model weights (does NOT update weights)
+    optimizer.step() # updates weights, in negative gradient direction (to decrease loss)
 
     if epoch % 50 == 0:
-        print(f'Epoch {epoch}, Loss: {loss.item():.4f}')
+        print(f'Epoch {epoch}, Loss: {loss.item():.4f}') # .item() converts a scalar tensor to a python number
 
+# prompt and get response
+
+# turn prompt into input format
+prompt = "The cat"
+tokens_prompt = prompt.lower().split()
+encoded = [stoi[word] for word in tokens_prompt]
+input_ids = torch.tensor(encoded, dtype=torch.long).unsqueeze(0)
+input_ids = input_ids.to(device)
+
+# generation func
+def generate(model, input_ids, max_new_tokens, context_length):
+    model.eval() # switch model to inference mode
+    
+    # note max_new_tokens, so will generate always the max_new_tokens
+    for _ in range(max_new_tokens):
+        
+        # Keep only last context_length tokens
+        input_cond = input_ids[:, -context_length:]
+        
+        # Forward pass
+        with torch.no_grad(): # don't build gradients, not necessary as we are not training
+            logits = model(input_cond) # for each of the 4 input tokens, the model predicts a probability distribution over the vocab
+        
+        # Take last token prediction
+        logits = logits[:, -1, :]   # (1, vocab_size)
+        
+        # Convert to probabilities
+        probs = F.softmax(logits, dim=-1)
+        
+        # Sample next token
+        next_token = torch.multinomial(probs, num_samples=1) # draw from predicted distribution, so will not always predict most likely token! But most of the times!
+        
+        # Append
+        input_ids = torch.cat((input_ids, next_token), dim=1) # add new predicted token, will be used in next iteration
+    
+    return input_ids
+
+# get output
+generated = generate(model, input_ids, max_new_tokens=10, context_length=4)
+generated = generated[0].tolist()
+decoded = [itos[i] for i in generated]
+print(' '.join(decoded))
