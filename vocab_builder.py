@@ -119,8 +119,6 @@ embedding_layer = EmbeddingLayer(vocab_size, embedding_dim, context_length)
 sample_input = torch.tensor(inputs[:2])
 output = embedding_layer(sample_input) # calling model directly calls forward method in pytorch
 
-print("Input shape:", sample_input.shape)
-print("Output shape:", output.shape)
 
 # attention layer
 
@@ -174,3 +172,79 @@ class FeedForward(nn.Module):
     def forward(self, x):
         return self.net(x)
     
+class TransformerBlock(nn.Module):
+    def __init__(self, embedding_dim):
+        super().__init__()
+        
+        self.attention = SelfAttention(embedding_dim)
+        self.feedforward = FeedForward(embedding_dim)
+        
+        # also some learning applied here, hence why there are two separate layernorm functions
+        self.ln1 = nn.LayerNorm(embedding_dim)
+        self.ln2 = nn.LayerNorm(embedding_dim)
+
+    def forward(self, x):
+        # Attention + residual
+        x = x + self.attention(self.ln1(x)) # add to itself to make sure its refinement, not full replacement
+        
+        # Feedforward + residual
+        x = x + self.feedforward(self.ln2(x))
+        
+        return x
+    
+class TinyGPT(nn.Module):
+    def __init__(self, vocab_size, embedding_dim, context_length):
+        super().__init__()
+
+        self.embedding = EmbeddingLayer(vocab_size, embedding_dim, context_length)
+        self.block = TransformerBlock(embedding_dim)
+        self.ln_final = nn.LayerNorm(embedding_dim)
+        self.head = nn.Linear(embedding_dim, vocab_size)
+
+    def forward(self, x):
+        x = self.embedding(x)
+        x = self.block(x)
+        x = self.ln_final(x)
+        logits = self.head(x)
+        return logits
+
+
+# now lets get to training!!
+
+# turn our train/test samples into tensors
+X = torch.tensor(inputs, dtype=torch.long)
+Y = torch.tensor(targets, dtype=torch.long)
+
+# move the tensors to the gpu if possible
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+X = X.to(device)
+Y = Y.to(device)
+
+# instantiate model and move to gpu
+model = TinyGPT(vocab_size, embedding_dim=32, context_length=context_length)
+model = model.to(device)
+
+# train!
+optimizer = torch.optim.AdamW(model.parameters(), lr=1e-3)
+
+epochs = 500
+
+for epoch in range(epochs):
+    model.train() # tells pytorch we are training, important for things called Dropout and Batchnorm (?)
+    
+    # forward pass
+    logits = model(X)
+
+    # flattening required for cross_entropy calculation
+    loss = F.cross_entropy(
+        logits.view(-1, vocab_size),
+        Y.view(-1)
+    )
+
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
+
+    if epoch % 50 == 0:
+        print(f'Epoch {epoch}, Loss: {loss.item():.4f}')
+
